@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using AvsFilterNet;
@@ -35,6 +36,8 @@ namespace AutoOverlay
                     throw;
                 }
             }
+
+            AfterInitialize(env);
         }
 
         protected virtual void Initialize(AVSValue args)
@@ -50,7 +53,11 @@ namespace AutoOverlay
             };
             SetVideoInfo(ref vi);
         }
-        
+
+        protected virtual void AfterInitialize(ScriptEnvironment env)
+        {
+        }
+
         public sealed override VideoFrame GetFrame(int n, ScriptEnvironment env)
         {
             using (new DynamicEnviroment(env))
@@ -88,27 +95,57 @@ namespace AutoOverlay
             return DynamicEnv.BlankClip(clip, color: white ? 0xFFFFFF : 0);
         }
 
-        protected dynamic ResizeRotate(
+        public dynamic ResizeRotate(
             Clip clip, 
             string resizeFunc, string rotateFunc, 
-            int width, int height, int angle = 0, 
-            RectangleF crop = default(RectangleF))
+            int width, int height, int angle = 0,
+            RectangleD crop = default(RectangleD))
         {
-            if (clip == null || crop == RectangleF.Empty && width == clip.GetVideoInfo().width && height == clip.GetVideoInfo().height)
+            if (clip == null || crop == RectangleD.Empty && width == clip.GetVideoInfo().width && height == clip.GetVideoInfo().height)
                 return clip.Dynamic();
+
+            var intCrop = Rectangle.FromLTRB(
+                (int) Math.Floor(crop.Left),
+                (int) Math.Floor(crop.Top),
+                (int) Math.Floor(crop.Right),
+                (int) Math.Floor(crop.Bottom)
+            );
+            if (!intCrop.IsEmpty)
+            {
+                clip = DynamicEnv.Crop(clip, intCrop.Left, intCrop.Top, -intCrop.Right, -intCrop.Bottom);
+                crop = RectangleD.FromLTRB(
+                    crop.Left - intCrop.Left,
+                    crop.Top - intCrop.Top,
+                    crop.Right - intCrop.Right,
+                    crop.Bottom - intCrop.Bottom
+                );
+            }
+
             dynamic resized;
-            if (crop == RectangleF.Empty)
+            if (crop == RectangleD.Empty)
                 resized = clip.Dynamic().Invoke(resizeFunc, width, height);
-            else resized = clip.Dynamic().Invoke(resizeFunc, width, height, crop.Left, crop.Top, -crop.Right, -crop.Bottom);
+            else resized = clip.Dynamic().Invoke(resizeFunc, width, height,
+                src_left: crop.Left, src_top: crop.Top, 
+                src_width: -crop.Right, src_height: -crop.Bottom);
             if (angle == 0)
                 return resized;
             return resized.Invoke(rotateFunc, angle / 100.0);
         }
 
+        protected void Log(Func<string> supplier)
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine(supplier());
+#endif
+        }
+
         protected void Log(string format, params object[] args)
         {
 #if DEBUG
-            System.Diagnostics.Debug.WriteLine(format, args);
+            if (args.Length == 0)
+                System.Diagnostics.Debug.WriteLine(format);
+            else
+                System.Diagnostics.Debug.WriteLine(format, args);
 #endif
         }
 

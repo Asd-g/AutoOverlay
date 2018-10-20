@@ -27,10 +27,10 @@ namespace AutoOverlay
         [AvsArgument(Min = 0)]
         public double AspectRatio2 { get; set; }
 
-        [AvsArgument(Min = 360, Max = 360)]
+        [AvsArgument(Min = -360, Max = 360)]
         public double Angle1 { get; set; }
 
-        [AvsArgument(Min = 360, Max = 360)]
+        [AvsArgument(Min = -360, Max = 360)]
         public double Angle2 { get; set; }
 
         [AvsArgument(Min = 1)]
@@ -42,7 +42,7 @@ namespace AutoOverlay
         [AvsArgument(Min = 0)]
         public double MaxSampleDiff { get; set; } = 5;
 
-        [AvsArgument(Min = 0, Max = 5)]
+        [AvsArgument(Min = -5, Max = 5)]
         public int Subpixel { get; set; }
 
         [AvsArgument(Min = 1.1, Max = 5)]
@@ -51,8 +51,8 @@ namespace AutoOverlay
         [AvsArgument(Min = 1, Max = 100)]
         public int Branches { get; set; } = 1;
 
-        [AvsArgument(Min = 1, Max = 100)]
-        public double BranchMaxDiff { get; set; } = 1;
+        [AvsArgument(Min = 0, Max = 100)]
+        public double BranchMaxDiff { get; set; } = 0.1;
 
         [AvsArgument(Min = 0)]
         public double AcceptableDiff { get; set; } = 5;

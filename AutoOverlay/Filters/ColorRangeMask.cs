@@ -1,7 +1,7 @@
 ﻿using AutoOverlay;
 using AvsFilterNet;
 
-[assembly: AvisynthFilterClass(typeof(ColorRangeMask), nameof(ColorRangeMask), "c[low]i[high]i", MtMode.NICE_FILTER)]
+[assembly: AvisynthFilterClass(typeof(ColorRangeMask), nameof(ColorRangeMask), "c[low]i[high]i", OverlayUtils.DEFAULT_MT_MODE)]
 namespace AutoOverlay
 {
     public class ColorRangeMask : AvisynthFilter

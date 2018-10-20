@@ -30,7 +30,7 @@ namespace AutoOverlay
 
         public static AVSValue FindClip(Clip clip)
         {
-            return Env?.cache.Values.FirstOrDefault(p => p.Item2 == clip)?.Item1;
+            return Env?.cache?.Values.FirstOrDefault(p => p.Item2 == clip)?.Item1;
         }
 
         ~DynamicEnviroment()
@@ -132,7 +132,7 @@ namespace AutoOverlay
 
         public static implicit operator Clip(DynamicEnviroment clip) => clip.Clip;
 
-        public static implicit operator ScriptEnvironment(DynamicEnviroment env) => env._env;
+        public static implicit operator ScriptEnvironment(DynamicEnviroment env) => env?._env;
 
         class Key
         {

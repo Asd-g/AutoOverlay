@@ -13,7 +13,10 @@ namespace AutoOverlay
 {
     public static class OverlayUtils
     {
-        public const string DEFAULT_RESIZE_FUNCTION = "BicubicResize";
+        public const string DEFAULT_PRESIZE_FUNCTION = "BilinearResize";
+        public const string DEFAULT_RESIZE_FUNCTION = "Spline16Resize";
+        public const string DEFAULT_ROTATE_FUNCTION = "BilinearRotate";
+        public const MtMode DEFAULT_MT_MODE = MtMode.SERIALIZED;
 
         [DllImport("kernel32.dll", EntryPoint = "CopyMemory", SetLastError = false)]
         public static extern void CopyMemory(IntPtr dest, IntPtr src, int count);
@@ -67,10 +70,15 @@ namespace AutoOverlay
             return new DynamicEnviroment(clip);
         }
 
-        public static bool IsRealPlanar(Clip clip)
+        public static bool IsRealPlanar(this Clip clip)
         {
             var colorInfo = clip.GetVideoInfo().pixel_type;
-            return colorInfo.HasFlag(ColorSpaces.CS_PLANAR) && !colorInfo.HasFlag(ColorSpaces.CS_INTERLEAVED); //Y8 is interleaved
+            return IsRealPlanar(colorInfo);
+        }
+
+        public static bool IsRealPlanar(this ColorSpaces pixelType)
+        {
+            return pixelType.HasFlag(ColorSpaces.CS_PLANAR) && !pixelType.HasFlag(ColorSpaces.CS_INTERLEAVED); //Y8 is interleaved
         }
 
         public static void ResetChroma(VideoFrame frame)
@@ -129,12 +137,16 @@ namespace AutoOverlay
 
         public static int GetWidthSubsample(this ColorSpaces colorSpace)
         {
+            if (!colorSpace.IsRealPlanar())
+                return 1;
             return colorSpace.HasFlag(ColorSpaces.CS_Sub_Width_1) ? 1 :
                 (colorSpace.HasFlag(ColorSpaces.CS_Sub_Width_4) ? 4 : 2);
         }
 
         public static int GetHeightSubsample(this ColorSpaces colorSpace)
         {
+            if (!colorSpace.IsRealPlanar())
+                return 1;
             return colorSpace.HasFlag(ColorSpaces.CS_Sub_Height_1) ? 1 :
                 (colorSpace.HasFlag(ColorSpaces.CS_Sub_Height_4) ? 4 : 2);
         }
@@ -183,7 +195,7 @@ namespace AutoOverlay
                     bmp.Palette = palette;
                     break;
                 case PixelFormat.Format24bppRgb:
-                    bmp = new Bitmap(frame.GetRowSize()/3, frame.GetHeight(), frame.GetPitch(), pixelFormat, frame.GetReadPtr());
+                    bmp = new Bitmap(frame.GetRowSize() / 3, frame.GetHeight(), frame.GetPitch(), pixelFormat, frame.GetReadPtr());
                     bmp.RotateFlip(RotateFlipType.Rotate180FlipX);
                     break;
                 default:
@@ -270,6 +282,22 @@ namespace AutoOverlay
                 .ForEach(p => p.Dispose());
         }
 
+        public static Size GetSize(this Clip clip)
+        {
+            var info = clip.GetVideoInfo();
+            return info.GetSize();
+        }
+
+        public static Size GetSize(this VideoInfo info)
+        {
+            return new Size(info.width, info.height);
+        }
+
+        public static int GetArea(this Size size)
+        {
+            return size.Width * size.Height;
+        }
+
         public static object AsObject(this AVSValue value)
         {
             if (value.IsArray())
@@ -297,6 +325,26 @@ namespace AutoOverlay
             if (value.IsBool())
                 return value.AsBool();
             throw new ArgumentException("Unrecognized AvsValue type");
+        }
+
+        public static bool IsLuma(this YUVPlanes plane)
+        {
+            return plane != YUVPlanes.PLANAR_U && plane != YUVPlanes.PLANAR_V;
+        }
+
+        public static bool IsChroma(this YUVPlanes plane)
+        {
+            return plane == YUVPlanes.PLANAR_U || plane == YUVPlanes.PLANAR_V;
+        }
+
+        public static RectangleD RealCrop(this Rectangle crop)
+        {
+            return RectangleD.FromLTRB(
+                crop.Left / OverlayInfo.CROP_VALUE_COUNT_R,
+                crop.Top / OverlayInfo.CROP_VALUE_COUNT_R,
+                crop.Right / OverlayInfo.CROP_VALUE_COUNT_R,
+                crop.Bottom / OverlayInfo.CROP_VALUE_COUNT_R
+            );
         }
     }
 }

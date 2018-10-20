@@ -8,12 +8,14 @@
 //
 
 using System;
+using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Threading.Tasks;
 using AutoOverlay;
 using AvsFilterNet;
 
-[assembly: AvisynthFilterClass(typeof(BilinearRotate), nameof(BilinearRotate), "cf", MtMode.NICE_FILTER)]
+[assembly: AvisynthFilterClass(typeof(BilinearRotate), nameof(BilinearRotate), "cf", OverlayUtils.DEFAULT_MT_MODE)]
 namespace AutoOverlay
 {
     public class BilinearRotate : AvisynthFilter
@@ -70,12 +72,17 @@ namespace AutoOverlay
                     var width = vi.width / (vi.height / height);
                     var pixelSize = frame.GetRowSize(plane) / width;
 
+                    //if (plane == YUVPlanes.PLANAR_Y)
+                    //    res.ToBitmap(PixelFormat.Format8bppIndexed, YUVPlanes.PLANAR_Y).Save($"E:\\test\\{n}_{GetHashCode()}.png");
+
                     NativeUtils.BilinearRotate(
                         frame.GetReadPtr(plane), frame.GetRowSize(plane) / pixelSize, frame.GetHeight(plane),
                         frame.GetPitch(plane),
                         res.GetWritePtr(plane), res.GetRowSize(plane) / pixelSize, res.GetHeight(plane),
                         res.GetPitch(plane),
                         angle, pixelSize);
+
+                    
                 });
             }
 

@@ -1,8 +1,10 @@
+#pragma once
+#include <Simd/SimdLib.h>
 using namespace System;
 using namespace Collections::Generic;
 using namespace Runtime::InteropServices;
 
-const double EPSILON = std::numeric_limits<double>::epsilon();
+const double EPSILON = 0.00000001;
 
 namespace AutoOverlay
 {
@@ -23,7 +25,7 @@ namespace AutoOverlay
 
 	struct HistogramFilling
 	{
-		array<int>^ * histogram;
+		array<uint32_t>^ * histogram;
 		int rowSize;
 		int height;
 		int channel;
@@ -47,6 +49,7 @@ namespace AutoOverlay
 		int overMaskStride;
 		int width;
 		int height;
+		bool simd;
 	};
 
 	public ref class NativeUtils sealed
@@ -57,12 +60,12 @@ namespace AutoOverlay
 			IntPtr srcMask, int srcMaskStride,
 			IntPtr over, int overStride,
 			IntPtr overMask, int overMaskStride,
-			int width, int height, int depth)
+			int width, int height, int depth, bool simd)
 		{
 			SquaredDiffParams params = {
 				src, srcStride, srcMask, srcMaskStride,
 				over, overStride, overMask, overMaskStride,
-				width, height
+				width, height, simd
 			};
 			switch(depth)
 			{
@@ -78,7 +81,7 @@ namespace AutoOverlay
 		template <typename TColor>
 		static double SquaredDifferenceSum(SquaredDiffParams params)
 		{
-			__int64 sum = 0;
+			uint64_t sum = 0;
 			TColor* src = reinterpret_cast<TColor*>(params.src.ToPointer());
 			TColor* srcMask = reinterpret_cast<TColor*>(params.srcMask.ToPointer());
 			TColor* over = reinterpret_cast<TColor*>(params.over.ToPointer());
@@ -90,6 +93,45 @@ namespace AutoOverlay
 
 			int pixelCount = params.width * params.height;
 
+			if (params.simd)
+			{
+				if (typeid(TColor) == typeid(unsigned char))
+				{
+					const uint8_t* srcp = reinterpret_cast<uint8_t*>(params.src.ToPointer());
+					const uint8_t* overp = reinterpret_cast<uint8_t*>(params.over.ToPointer());
+					bool hasSrcMask = params.srcMask.ToPointer() != nullptr;
+					bool hasOverMask = params.overMask.ToPointer() != nullptr;
+					if (!hasSrcMask && !hasOverMask)
+					{
+						SimdSquaredDifferenceSum(
+							srcp,
+							params.srcStride,
+							overp,
+							params.overStride,
+							params.width,
+							params.height,
+							&sum);
+						return static_cast<double>(sum) / pixelCount;
+					}
+					else if (hasSrcMask != hasOverMask)
+					{
+						const uint8_t* maskp = reinterpret_cast<uint8_t*>(
+							(hasSrcMask ? params.srcMask : params.overMask).ToPointer());
+						SimdSquaredDifferenceSumMasked(
+							srcp,
+							params.srcStride,
+							overp,
+							params.overStride,
+							maskp,
+							hasSrcMask ? params.srcMaskStride : params.overMaskStride,
+							255,
+							params.width,
+							params.height,
+							&sum);
+						return static_cast<double>(sum) / pixelCount;
+					}
+				}
+			}
 			if (srcMask == nullptr && overMask == nullptr) {
 				for (auto row = 0; row < params.height; ++row)
 				{
@@ -133,18 +175,42 @@ namespace AutoOverlay
 		}
 
 		static void FillHistogram(
-			array<int>^ histogram, int rowSize, int height, int channel,
+			array<uint32_t>^ histogram, int rowSize, int height, int channel,
 			IntPtr image, int imageStride, int imagePixelSize,
-			IntPtr mask, int maskStride, int maskPixelSize)
+			IntPtr mask, int maskStride, int maskPixelSize, bool simd)
 		{
 			HistogramFilling params = {
 				&histogram, rowSize, height, channel,
 				image, imageStride, imagePixelSize,
 				mask, maskStride, maskPixelSize
 			};
-			if (histogram->Length == 256)
+			if (simd && histogram->Length == 1 << 8 && params.imagePixelSize == 1)
+			{
+				const auto ptr = reinterpret_cast<unsigned char*>(params.image.ToPointer()) + params.channel;
+				const pin_ptr<uint32_t> first = &(*params.histogram)[0];
+				uint32_t* hist = first;
+				if (params.mask.ToPointer() == nullptr)
+				{
+					SimdHistogram(ptr, params.rowSize / params.imagePixelSize, params.height, params.imageStride, hist);
+				}
+				else if (params.maskPixelSize == params.imagePixelSize)
+				{
+					const auto maskPtr = reinterpret_cast<unsigned char*>(params.mask.ToPointer()) + params.channel;
+					SimdHistogramMasked(ptr, params.imageStride, params.rowSize / params.imagePixelSize, params.height, maskPtr, params.maskStride, 255, hist);
+				}
+				else
+				{
+					FillHistogram<unsigned char>(params);
+				}
+			}
+			else if (histogram->Length == 1 << 8) 
+			{
 				FillHistogram<unsigned char>(params);
-			else FillHistogram<unsigned short>(params);
+			}
+			else
+			{
+				FillHistogram<unsigned short>(params);
+			}
 		}
 
 		template <typename TColor>
@@ -152,10 +218,10 @@ namespace AutoOverlay
 		{
 			params.imageStride /= sizeof(TColor);
 			params.rowSize /= sizeof(TColor);
-			pin_ptr<int> first = &(*params.histogram)[0];
-			int* hist = first;
+			pin_ptr<uint32_t> first = &(*params.histogram)[0];
+			uint32_t* hist = first;
 			TColor* data = reinterpret_cast<TColor*>(params.image.ToPointer()) + params.channel;
-			if (params.mask.ToPointer() == NULL)
+			if (params.mask.ToPointer() == nullptr)
 			{
 				for (int y = 0; y < params.height; y++, data += params.imageStride)
 					for (int x = 0; x < params.rowSize; x += params.imagePixelSize)
@@ -198,7 +264,7 @@ namespace AutoOverlay
 		{
 			TInputColor* readData = reinterpret_cast<TInputColor*>(params.input.ToPointer()) + params.channel;
 			TOutputColor* writeData = reinterpret_cast<TOutputColor*>(params.output.ToPointer()) + params.channel;
-			XorshiftRandom^ rand = gcnew XorshiftRandom();
+			FastRandom^ rand = gcnew FastRandom(0);
 			params.strideIn /= sizeof(TInputColor);
 			params.strideOut /= sizeof(TOutputColor);
 			params.inputRowSize /= sizeof(TInputColor);
