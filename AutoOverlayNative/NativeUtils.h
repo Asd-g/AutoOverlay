@@ -87,6 +87,7 @@ namespace AutoOverlay
 			params.srcMaskStride /= sizeof(TColor);
 			params.overStride /= sizeof(TColor);
 			params.overMaskStride /= sizeof(TColor);
+			params.width /= sizeof(TColor);
 
 			int pixelCount = params.width * params.height;
 
