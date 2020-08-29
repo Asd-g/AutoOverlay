@@ -1,3 +1,5 @@
+# This repo is archived because the bug is fixed and there are more updates on the original repo.
+
 # AutoOverlay AviSynth plugin
 
 ### Requirements
